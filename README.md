@@ -15,13 +15,12 @@ Inspired by computational methods on vision, we develop a new linguistic task, t
 
 ### BLM-AgrF
 
-This is a dataset for subject-verb agreement in French. It is described in an EACL 2023 paper (link will be included when available). It consists of 3 subsets:
+This is a dataset for subject-verb agreement in French. It is described in the [arXiv paper](https://arxiv.org/abs/2205.10866), and there are more details in an EACL 2023 paper (link will be included when available). It consists of 3 subsets:
 * `type I` with minimal lexical variation
 * `type II` with one word different for each sentence in a problem instance
 * `type III` with each sentence in a problem instance lexically different from the others
 
-Further details about the data in the paper.
-
+The data can be found under data/BLM-AgrF/
 
 ## Code
 
@@ -36,7 +35,8 @@ The current code contains scripts to process the data, and baselines for testing
 
 The baseline
 
-* `FFNN` 
+* `FFNN` -- a 3 layer FFNN
+* `CNN` -- a 3 layer CNN
 
 ### Running experiments
 
@@ -47,6 +47,7 @@ To run experiments, call main.py. Main arguments:
 * `baseline_sys` : the baseline system: ffnn or cnn
 * `train_perc`: how much data to use for training. Could be given as percentage or actual numbers, e.g.: "1.0 1.0 1.0" will use all the available data for each type, "2073 2073 2073" will use 2073 instances for training for each type (this is the max available for type I). The values need not be the same.
 * `epochs`: the number of epochs to train. When the number of training examples is small, a higher number of epochs usually works better. When using a large number of training instances (for type II and type III subsets), one epoch will take a long time to run.
+* `lr`: the learning rate. Default = 1e-3
 * `n_exps`: number of experiments to run
 
 The results of the experiments (P, R, F, Acc, error counts) are exported to a csv file in the results subdir.
