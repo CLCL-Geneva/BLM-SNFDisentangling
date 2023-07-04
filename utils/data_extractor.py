@@ -4,26 +4,18 @@ import numpy as np
 
 from torch.utils.data import Dataset, DataLoader
 
-
 class SeqDataset(Dataset):
-    def __init__(self,feature,target,truth):
-        self.feature = feature
-        self.target = target
-        self.truth = truth
+    def __init__(self,ListOfLists):
+        self.tuples = list(zip(*ListOfLists))
     
     def __len__(self):
-        return len(self.feature)
+        return len(self.tuples)
     
     def __getitem__(self,idx):
-        item = self.feature[idx]
-        label = self.target[idx]
-        truth = self.truth[idx]
-        
-        return item,label,truth
+        return self.tuples[idx]
     
     def __size__(self):
-        return self.feature.size()
-    
+        return self.tuples.size()
     
 
 def divide_in_batches(data, batch_size):
@@ -31,12 +23,12 @@ def divide_in_batches(data, batch_size):
     return sublists
 
 
-def data_loader(x, y, z, batch, shuf):
-    data = SeqDataset(x, y, z)
+def data_loader(ListOfLists, batch, shuf):    
+    data = SeqDataset(ListOfLists)
     return DataLoader(data, batch_size=batch, shuffle=shuf)
 
 
-def wrapper(data, seq, model, dim = 768, label = False, attn = -1, tokenizer = None, device = "cpu", comb = "sum"):
+def wrapper(data, seq, model, dim = 768, label = False, layer=-1, attn = -1, tokenizer = None, device = "cpu", comb = "sum"):
     
     with torch.no_grad():
         
@@ -47,7 +39,7 @@ def wrapper(data, seq, model, dim = 768, label = False, attn = -1, tokenizer = N
 
             for i, sequence in enumerate(data):
                 if not label:
-                    vecs[i] = torch.from_numpy(encode_sequence(sequence, model, attn, tokenizer, dim, device, comb))
+                    vecs[i] = torch.from_numpy(encode_sequence(sequence, model, layer, attn, tokenizer, dim, device, comb))
                 else:
                     vs = torch.from_numpy(np.asarray([torch.tensor(-1) if x=="False" else torch.tensor(1) for x in sequence]))
                     vecs[i] = vs.reshape(len(data[0]), 1)
@@ -63,27 +55,25 @@ def wrapper(data, seq, model, dim = 768, label = False, attn = -1, tokenizer = N
     return vecs
 
 
-def encode_sequence(sequence, model, attn, tokenizer, dim, device, comb):
-    #print("Encoding sequence: {}".format(sequence))
+def encode_sequence(sequence, model, layer, attn, tokenizer, dim, device, comb):
     
     representation = []
     for sentence in sequence:
-#        print("processing sentence: {}".format(sentence))
         
         if attn == -1:
-#            representation.append(model.encode(sentence))
-            token_ids = torch.tensor([tokenizer.encode(sentence)])
-            
-            last_layer = model(token_ids)[0]
-#            print("last layer shape: {}".format(last_layer.shape))
-            # torch.Size([1, 8, 768])  -> (batch size x number of tokens x embedding dimension)
-            
-            # The BERT [CLS] token correspond to the first hidden state of the last layer
-            #print("sentence embedding: {}".format(last_layer[:, 0, :].shape))
-            representation.append(last_layer[:, 0, :].cpu().detach().numpy())
+            if layer == -1:
+                token_ids = torch.tensor([tokenizer.encode(sentence)])
+
+                last_layer = model(token_ids)[0]
+                representation.append(last_layer[:, 0, :].cpu().detach().numpy())
+            else:
+                input = tokenizer(sentence, return_tensors="pt")
+                tokens = tokenizer.tokenize(sentence)
     
+                outputs = model(**input, output_hidden_states=True)         
+                representation.append(outputs.hidden_states[layer][:, 0, :].cpu().detach().numpy())
+                    
         else:
-            #print("Processing sentence: {}".format(sentence))
             input = tokenizer(sentence, return_tensors="pt")
             tokens = tokenizer.tokenize(sentence)
 
@@ -93,6 +83,8 @@ def encode_sequence(sequence, model, attn, tokenizer, dim, device, comb):
     ## normalize
     
     return np.asarray(representation, dtype='float32').squeeze()
+
+
 
 
 def get_attention(tokens, outputs, attn_lev, dim, comb="sum"):
@@ -132,8 +124,6 @@ def get_tokens(tokens, filter_ts=True):
     
     if not filter_ts:
         return tokens, [[i] for i in range(len(tokens))]
-    
-    #print("Filtering tokens from {}".format(tokens))    
         
     filtered_tokens = []
     indices = []

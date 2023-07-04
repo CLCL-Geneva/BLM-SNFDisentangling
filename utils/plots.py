@@ -13,12 +13,19 @@ import numpy as np
 
 import matplotlib
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+
 from matplotlib import cm
 from matplotlib.colors import LightSource
 
+from sklearn.manifold import TSNE
+from sklearn.decomposition import PCA
+
 import seaborn as sns
 
-colours = list(matplotlib.colors.TABLEAU_COLORS.keys())
+#colours = list(matplotlib.colors.TABLEAU_COLORS.keys())
+colours = list(matplotlib.colors.CSS4_COLORS.keys())
+
 
 def plot_fill(results_list,plot_names,x_axis,y_axis,title,file_name):
     fig, ax = plt.subplots()
@@ -74,6 +81,41 @@ def plot_X_test(results,plot_name,x_axis,y_axis,title,file_name):
     plt.savefig(file_name)
     print("figure saved to {}".format(file_name))
     
+    
+def get_coordinates(model, vectors):
+    projections = model.fit_transform(vectors)
+    return [projections[i][0] for i in range(len(vectors))], [projections[i][1] for i in range(len(vectors))]
+
+    
+## data_type can be "train" or "test"
+def plot_latent_2d(latent_vecs, patterns, data_type):
+
+    unique_patterns = sorted(list(set(patterns)))
+    colors = dict(zip(unique_patterns, cm.rainbow(np.linspace(0, 1, len(unique_patterns))) ))
+    #print("Unique patterns: {}".format(unique_patterns))
+    #print("Colours: {}".format(colors))
+    #print("Patterns: {}".format(patterns))
+    vec_colours = [colors[p] for p in patterns]
+
+    tsne_X, tsne_Y = get_coordinates(TSNE(n_components=2, random_state=0), latent_vecs)
+    pca_X, pca_Y = get_coordinates(PCA(n_components=2), latent_vecs)
+    
+    fig,(axs_tsne, axs_pca) = plt.subplots(ncols=2, figsize=(10,4))
+
+    axs_tsne.scatter(tsne_X, tsne_Y, c=vec_colours, alpha=0.5)
+    axs_tsne.set_title("TSNE projection")
+    
+    axs_pca.scatter(pca_X, pca_Y, c=vec_colours, alpha=0.5)
+    axs_pca.set_title("PCA projection")
+    
+    labels_legend = list(colors.keys())
+    color_patches = [patches.Patch(facecolor=colors[l]) for l in labels_legend]
+    fig.legend(handles = color_patches, labels=labels_legend, loc = 'lower right')
+    plt.suptitle("Projections of the latent layer from the {} data".format(data_type))
+    plt.show()
+
+    
+
     
 
 def plot_latent_values(latent_values, x_axis, y_axis, title, file_name, N):
@@ -146,7 +188,8 @@ def plot_latent_values_separately(latent_values, x_axis, y_axis, title, file_nam
                 #y = random.sample(y,N)
                 y = [data[n][k] for n in range(N)]
 
-                axs[k,j].scatter(x, y, s=1, color=colours[k])  #, 'o', color = colours[k], label = d_type + "_" + d + "_" + str(k))    
+                #axs[k,j].scatter(x, y, s=1, color=colours[k])  #, 'o', color = colours[k], label = d_type + "_" + d + "_" + str(k))    
+                axs[k,j].scatter(x, y, s=1, color='tab:orange')
                 
                 #axs[i,j].legend()
                 #axs[i,j].set_xlabel(x_axis)
@@ -197,6 +240,7 @@ def plot_latent_values_histograms(latent_values, title, file_name):
         
         plt.show()
         plt.savefig(file_name + "_" + d_type + ".png")    
+        
 
 
 
@@ -239,6 +283,25 @@ def plot_3d(results, transformer, x_axis, y_axis, z_axis, title, filename):
     
     plt.show()
     plt.savefig(filename)        
+    
+
+
+## plot the filters for the VAE and dual_VAE's encoder -- they have one convolutional layer
+def plot_filters(model):
+    
+    filters = model.encoder.conv1.weight.squeeze()
+    # the shape of these filters most probably is [32, 1, 3, 15, 15] and after the squeeze [32, 3, 15, 15]
+    
+    n_rows = filters.shape[1]
+    n_cols = filters.shape[0]
+    
+    fig, axs = plt.subplots(nrows = n_rows, ncols = n_cols)
+    for i in range(n_cols):
+        for j in range(n_rows):
+            sns.heatmap(filters[i][j].cpu().detach().numpy(), ax=axs[j][i], cmap="vlag")
+    
+    plt.title(model.getinfo())
+    plt.show()
     
 
 

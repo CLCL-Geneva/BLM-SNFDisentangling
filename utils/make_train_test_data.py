@@ -1,8 +1,10 @@
-
-import csv
 import os
 import json
 import random
+
+import glob
+import pandas as pd
+
 import re
 
 import argparse
@@ -10,76 +12,80 @@ import argparse
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--data_path", default="../data/BLM-AgrF",\
-                        help="Path to the data directory")
+    parser.add_argument("--data_path", default="../data/blm4dev", help="data directory")    
+    parser.add_argument("--sep", default=",", help="column separator character in the data files")
+        
+    parser.add_argument("--train_test_split", default = 0.9)
     
     args = parser.parse_args()
-    args.data_path = os.path.abspath(args.data_path)
+    use_templates = False
     
     for type_data in ["type_I", "type_II", "type_III"]:
         # Extract sequences from csv files
-        sequences = []
         if type_data == ".DS_Store":
             continue
-        first_path = args.data_path + "/" + type_data + "/"   ##"/raw/"
-        for path in os.listdir(first_path):
-            if "csv" in path:
-                print(type_data, path)
-                if path == ".DS_Store":
-                    continue
-                full_dir = first_path + path
-                #label = path.split("_")[1][:-4]
-                label = path.split(".")[0]
-                with open(full_dir, encoding="utf-8") as csv_file:
-                    reader = csv.reader(csv_file)
-                    for i, line in enumerate(reader):
-                        if i == 0:
-                            continue
-                        if len(line) == 0:
-                            continue
-                        #line = line[1:]
-                        line = [process_sent(sent) for sent in line[1:]]
-                        # uncomment it when using flaubert uncased 
-                        # line = [el.strip(".").strip(" ").lower() for el in line]
-                        line.append(label)
-                        sequences.append(line)
-    
-        random.shuffle(sequences)
-        print(len(sequences))
-    
-        nr_train_insts = int(len(sequences) * 0.9)
-        # 90% train-valid (80% train +10%valid), 10% test
-        train_data = sequences[:nr_train_insts]
-        test_data = sequences[nr_train_insts:]
-    
-        print(len(train_data), len(test_data))
-        
-        json_path = args.data_path + "/" + type_data + "/datasets/"
-       
-        process_data(train_data, json_path + "/train/sentences/", "train")
-        process_data(test_data, json_path + "/test/sentences/", "test")    
+        for data_file in glob.glob(args.data_path + "/" + type_data + "/*.csv"):
+            data = pd.read_csv(data_file, sep = args.sep)
+            print("headers in file {}: {}".format(data_file, data.columns))
+            data_headers = get_headers(args, data.columns, use_templates)
+            
+            indices = [0] * len(data)
+            train_len = int(len(indices) * args.train_test_split) 
+            indices[:train_len] = [1] * train_len
+            random.shuffle(indices)
+
+            json_path = args.data_path + "/" + type_data + "/datasets/"
+           
+            process_data(data, [i for i, x in enumerate(indices) if x == 1], json_path + "/train/sentences/", data_headers, use_templates) 
+            process_data(data, [i for i, x in enumerate(indices) if x == 0], json_path + "/test/sentences/", data_headers, use_templates)    
     
 
-def process_data(data, path, prefix):
+#    sent_headers, answer_headers, truth_headers, label_headers, sent_template_headers, answer_template_headers = data_headers
+
+def get_headers(args, columns, templates=False):
+
+    patts = {"sent": re.compile(r"Sent_\d+"), "sent_temp": re.compile(r"Sent_template_\d+"), 
+             "answ": re.compile(r"Answer_\d+"), "answ_temp": re.compile(r"Answer_template_\d+"), 
+             "label": re.compile(r"Answer_label_\d+"), "truth": re.compile(r"Answer_value_\d+")}   
+    headers = {"sent": [], "sent_temp": [], 
+               "answ": [], "answ_temp": [],
+               "label": [], "truth": []}
+            
+    for col in columns:
+        for p in patts:
+            if patts[p].search(col):
+                headers[p].append(col)
+                break
+                
+    if not templates:
+        headers["answ_temp"] = []
+                
+    return headers["sent"], headers["answ"], headers["truth"], headers["label"], headers["sent_temp"], headers["answ_temp"]
+    
+    
+    
+
+def process_data(data, indices, path, data_headers, templates=False):
 
     os.makedirs(path, exist_ok = True)
     x = []
     y = []
     truth_bool = []
     labels = []
-    type_file = []
+    templates = []
+    #types = []  ## for the agreement data these are rel, main, compl -- but the templates supersede this, I think, so I don't output this anymore 
+
+    sent_headers, answer_headers, truth_headers, label_headers, sent_template_headers, answer_template_headers = data_headers
+
+    for idx in indices:
+        row = data.iloc[idx]
+        x.append([row[i] for i in sent_headers])
+        y.append([row[i] for i in answer_headers])
+        truth_bool.append([str(row[i]) for i in truth_headers])
+        labels.append([str(row[i]) for i in label_headers])
         
-    for sequence in data:
-        # sequence
-        x.append(sequence[:7])
-        # all the possible answers
-        ans = sequence[7:13]
-        y.append(ans)
-        # booleans indicating the truth between answers
-        truth_bool.append(sequence[13:19])
-        labels.append(sequence[19:-1])
-        
-        type_file.append(sequence[-1])
+        if templates:
+            templates.append([[row[i] for i in sent_template_headers], [row[i] for i in answer_template_headers]])
 
     with open(path + "/x.json", "w", encoding="utf-8") as f:
         json.dump(x, f, ensure_ascii=False)
@@ -89,17 +95,10 @@ def process_data(data, path, prefix):
         json.dump(y, f, ensure_ascii=False)
     with open(path + "/labels.json", "w", encoding="utf-8") as f:
         json.dump(labels, f, ensure_ascii=False)
-    with open(path + "/type_file.json", "w", encoding="utf-8") as f:
-        json.dump(type_file, f, ensure_ascii=False)
-
-
-## not really necessary anymore, the data was cleaned up before
-def process_sent(sent):
-    sent = sent.strip()
-    sent = re.sub(r'( [A-Z])', lambda lowercase: lowercase.group(1).lower(), sent)  ## lower case inner capitalization
-    sent = re.sub(r"('|´|`|’) ", r"'", sent)
-    sent = re.sub(r" ('|´|`|’)", r"'", sent)
-    return ' '.join(re.split(r'\s+', sent))
+        
+    if templates:
+        with open(path + "/templates_file.json", "w", encoding="utf-8") as f:
+            json.dump(templates, f, ensure_ascii=False)
 
 
 if __name__ == '__main__':
