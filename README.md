@@ -12,6 +12,8 @@ Inspired by computational methods on vision, we develop a new linguistic task, t
 
 [Blackbird's language matrices (BLMs): a new benchmark to investigate disentangled generalisation in neural networks](https://arxiv.org/abs/2205.10866) describes the project, and the first BLM dataset generated within this paradigm.
 
+[Blackbird language matrices (BLM), a new task for rule-like generalization in neural networks: Motivations and Formal Specifications](https://arxiv.org/abs/2306.11444) provides details about the motivations and formal specifications of BLM's.
+
 [BLM-AgrF: A New French Benchmark to Investigate Generalization of Agreement in Neural Networks](https://aclanthology.org/2023.eacl-main.99/) describes the BLM_AgrF dataset -- subject-verb agreement in French.
 
 [Grammatical information in BERT sentence embeddings as two-dimensional arrays (to appear at RepL4NLP 2023)]() describes the impact of reshaping BERT sentence embeddings to 2D arrays on detecting subject-verb agreement information.
