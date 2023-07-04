@@ -8,7 +8,13 @@ To reach better, possibly human-like, abilities in neural networks’ abstractio
 
 Inspired by computational methods on vision, we develop a new linguistic task, to learn more disentangled linguistic representations that reflect the underlying linguistic rules of grammar. The solution of the tasks requires identifying the underlying rules that generate compositional datasets (like Raven’s progressive matrices), but for language. We call them Blackbird’s Language Matrices (BLMs).
 
-[This paper](https://arxiv.org/abs/2205.10866) describes the project, and the first BLM dataset generated within this paradigm.
+### Publications
+
+[Blackbird's language matrices (BLMs): a new benchmark to investigate disentangled generalisation in neural networks](https://arxiv.org/abs/2205.10866) describes the project, and the first BLM dataset generated within this paradigm.
+
+[BLM-AgrF: A New French Benchmark to Investigate Generalization of Agreement in Neural Networks](https://aclanthology.org/2023.eacl-main.99/) describes the BLM_AgrF dataset -- subject-verb agreement in French.
+
+[Grammatical information in BERT sentence embeddings as two-dimensional arrays (to appear at RepL4NLP 2023)]() describes the impact of reshaping BERT sentence embeddings to 2D arrays on detecting subject-verb agreement information.
 
 
 ## Data
@@ -24,12 +30,19 @@ The data can be found under data/BLM-AgrF/
 
 ## Code
 
-The current code contains scripts to process the data, and baselines for testing BERT embeddings for this task:
+The current code contains scripts to process the data, baselines for testing embeddings for this task, and several VAE-based architectures to test the impact of reshaping sentence embeddings as 2D arrays. It can produce and use sentence embeddings from pretrained models of BERT, RoBERTa and Electra.
 
 ### Data processing
 
 * `make_train_test_data.py` produces train/test splits from the provided csv files for each type I/II/III subset. It can be called without arguments -- the data directory is the data directory included in the repository. If this is changed, it should be provided: make_train_test_data.py --data_path <data_path>.
-* when running the main code, if it hasn't been done before, the system will extract sentence embeddings from the given transformer (bert or flaubert). The pre-trained models used are hardcoded (in the embeddings.py module). For BERT the model is bert-base-multilingual-cased, and for FlauBERT flaubert/flaubert_base_uncased. The necessary directories will be created under the type* subdirs in the data directory. (this takes a few hours, depending on the machine).
+  
+When running the main code (run_experiments.sh), if it hasn't been done before, the system will extract sentence embeddings from the given transformer (BERT, RoBERTa, Electra). The pre-trained models used are hardcoded (in the embeddings.py module):
+
+* BERT => bert-base-multilingual-cased, 
+* RoBERTa => xml-roberta-base,
+* Electra => google/electra-base-discriminator.
+
+The necessary directories will be created under the type* subdirs in the data directory. (this takes a few hours, depending on the machine).
 
 ### Baselines
 
@@ -38,17 +51,32 @@ The baseline
 * `FFNN` -- a 3 layer FFNN
 * `CNN` -- a 3 layer CNN
 
+### VAE architectures
+
+* `encoder-decoder`: encodes a sequence of sentences, decodes the answer
+  * with sentence embeddings as 2D arrays, input sequence is a stack of 2D arrays (vaes/VAE.py)
+  * with sentence embeddings as 1D arrays, input sequence is a stack of 1D arrays (vaes/VAE_1DxSeq.py)
+  * with sentence embeddings as 1D arrays, input sequence is a 1D array (concatenated sentence representations) (vaes/VAE_1D.py)
+
+* `encoder-double decoder`: encodes a sequence of sentences, one decoder reconstructs the input sequence, the other decoder decodes the answer
+  * with sentence embeddings as 2D arrays, input sequence is a stack of 2D arrays (vaes/dual_VAE.py)
+  * with sentence embeddings as 1D arrays, input sequence is a stack of 1D arrays (vaes/dual_VAE_1DxSeq.py)
+
 ### Running experiments
 
-To run experiments, call main.py. Main arguments:
+To run experiments, use run_xperiments.py. Main arguments:
 
 * `data_dir`: the top of the directory where the data is located. Default data/BLM-AgrF/
-* `transformer` : bert or flaubert. Default = bert
-* `baseline_sys` : the baseline system: ffnn or cnn
+* `transformer` : bert, roberta, electra. Default = bert
+* `baseline_sys` : the baseline system: ffnn, cnn, cnn_seq
+* `sys`: the VAE-based system to use
 * `train_perc`: how much data to use for training. Could be given as percentage or actual numbers, e.g.: "1.0 1.0 1.0" will use all the available data for each type, "2073 2073 2073" will use 2073 instances for training for each type (this is the max available for type I). The values need not be the same.
 * `epochs`: the number of epochs to train. When the number of training examples is small, a higher number of epochs usually works better. When using a large number of training instances (for type II and type III subsets), one epoch will take a long time to run.
 * `lr`: the learning rate. Default = 1e-3
 * `n_exps`: number of experiments to run
+* ...
+
+The script can also take a json configuration file from which it will read the provided arguments. Whatever is not specified will have the default values.
 
 The results of the experiments (P, R, F, Acc, error counts) are exported to a csv file in the results subdir.
 
