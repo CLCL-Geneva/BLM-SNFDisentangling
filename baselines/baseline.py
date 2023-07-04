@@ -29,7 +29,7 @@ class BaselineFFNN(nn.Module):
         print(self)
 
 
-    def forward(self, x):
+    def forward(self, x, mask=False):
         batch_size = x.shape[0]
 
         x = x.reshape(batch_size, x.shape[1]*x.shape[2])
@@ -45,10 +45,10 @@ class BaselineFFNN(nn.Module):
 
         
 
-class BaselineCNN(nn.Module):
+class BaselineCNN_1DxSeq(nn.Module):
 
     def __init__(self, embed_dim, seq_size):
-        super(BaselineCNN, self).__init__()
+        super(BaselineCNN_1DxSeq, self).__init__()
 
         # Bert vector dim: 768
         self.nc = embed_dim
@@ -72,7 +72,7 @@ class BaselineCNN(nn.Module):
         print(self)
 
 
-    def forward(self, x):
+    def forward(self, x, mask=False):
         batch_size = x.shape[0]
         
         x = x.view(batch_size, 1, self.seq_size, self.nc)
@@ -86,5 +86,70 @@ class BaselineCNN(nn.Module):
         return {"output": x}
      
     def getinfo(self):
-        return "Baseline_CNN"
+        return "Baseline_CNN_1DxSeq"
    
+
+hid_ch = 32
+emb_x_dim = 32  #32
+
+kernel_size = (3, 15, 15)  #(3, 10, 10)
+
+class BaselineCNN(nn.Module):
+    def __init__(self, embed_dim, seq_size):
+        super(BaselineCNN, self).__init__()
+
+        self.embed_dim = embed_dim
+        self.hidden_ch = hid_ch
+        
+        # Size of the sequence
+        self.seq_size = seq_size
+    
+        if self.embed_dim == 768:        ## 768 for sentence embedding, otherwise an attention matrix
+            self.x_dim = emb_x_dim 
+        else:
+            self.x_dim = int(math.sqrt(self.embed_dim))        
+
+        self.y_dim = int(self.embed_dim/self.x_dim)
+    
+        (k1seq, k1x, k1y) = kernel_size
+        n_conv_layers = 1
+    
+        nx = int((self.x_dim - k1x + n_conv_layers))
+        ny = int((self.y_dim - k1y + n_conv_layers))
+        nseq = int((self.seq_size - k1seq + n_conv_layers))
+           
+        # Convolutional layers
+        self.conv1 = nn.Conv3d(1, self.hidden_ch, kernel_size=(k1seq, k1x, k1y)) 
+
+        self.lin1 = nn.Linear(nx * ny * nseq * self.hidden_ch, self.embed_dim)
+        
+        print(self)
+
+
+    def forward(self, x, mask=False):
+        
+        batch_size = x.shape[0]
+    
+        #print("x before reshape: {}".format(x.shape))
+        #print("\treshaping to (1,{},{},{})".format(self.seq_size, self.x_dim, self.y_dim))
+        
+        #x = x.view(batch_size, 1, x.shape[1], x.shape[2], x.shape[3])
+        x = x.view(batch_size, 1, self.seq_size, self.x_dim, self.y_dim)
+        #x = torch.reshape(x, (batch_size, 1, self.seq_size, self.x_dim, self.y_dim))
+        #print("x after reshape: {}".format(x.shape))
+
+        x = torch.relu(self.conv1(x))
+        #print("x after conv 1: {}".format(x.shape))
+        
+        x = x.view(batch_size, -1)
+        #print("x after reshape: {}".format(x.shape))
+                
+        x = torch.relu(self.lin1(x))
+        #print("mean_var after lin1: {}".format(mean_var.shape))
+
+        return {"output": x}
+    
+    def getinfo(self):
+        return "Baseline_CNN_" + str(self.x_dim) + "x" + str(self.y_dim)
+
+        

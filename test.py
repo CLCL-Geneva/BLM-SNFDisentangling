@@ -1,25 +1,25 @@
 
 import sys
-import os
+import logging
 
 import torch
-import torch.nn as nn
-import json
-import numpy as np
-
-from sklearn.metrics.pairwise import cosine_similarity
 
 import utils.losses as losses  
-#import plot
 
+    
 
-def testing(testloader, labels, model, device, data_type):
+def testing(testloader, labels, model, device, result_keys, mask = None):
     model = model.to(device)
     # set to evaluation mode
     model.eval()
+    
+    try:
+        model.sampler.is_training = False
+    except AttributeError:
+        logging.info("model does not have sampler. skipping the is_training setting.")    
 
-    results = {"agreement_error":0, "coordination":0, "mis_num":0, "N1_alter":0, "N2_alter":0}   ## to avoid NaNs
-            
+    results = {x: 0 for x in result_keys}
+                
     # initialitation of the variables for evaluation
     tp = 0
     fp = 0
@@ -32,21 +32,10 @@ def testing(testloader, labels, model, device, data_type):
             truth = torch.flatten(truth)
             seq_labels = labels[idx]
             
-            seq = seq_x.squeeze(2)   #.transpose(-1, -2)
-            model_output = model(seq.to(device))
-            #output = output.view(1,output.shape[0])
+            seq = seq_x.squeeze(2)
+            model_output = model(seq.to(device), mask)
             output = model_output["output"].view(1,-1)
             
-            '''
-            if base:
-                ## for the baseline setting compare the inputs and outputs using cosine
-                
-                scores = torch.bmm(seq_x, seq_y).squeeze()
-                results.write("BMM scores: {}".format(scores))
-                results.write("Similarity average: {}".format(torch.mean(scores)))
-
-            else:
-            '''
             (max_ind, _pred) = losses.prediction(output, seq_y, device)
                         
             if truth[max_ind] == 1:
@@ -60,7 +49,7 @@ def testing(testloader, labels, model, device, data_type):
 
                 ### Score measures
                 
-    print("\nTP = {}, FP = {}, FN = {}, TN = {}\n".format(tp, fp, fn, tn))
+    logging.info("\nTP = {}, FP = {}, FN = {}, TN = {}\n".format(tp, fp, fn, tn))
     results["TP"] = tp
     results["FP"] = fp
     results["FN"] = fn
@@ -76,8 +65,10 @@ def testing(testloader, labels, model, device, data_type):
     results["F1"] = f1
     results["Acc"] = accuracy
     
-    print("Results: {}".format(results))
+    if mask is not None:
+        logging.info("\n Analysis for discrete latent probe mask = {}".format(mask))
+        
+    logging.info("Results: {}".format(results))
         
     return results
-
 
