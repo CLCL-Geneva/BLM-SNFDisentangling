@@ -15,4 +15,4 @@ Each subset contains 3 files, one for each of the main syntactic variations: mai
 
 The details are in the paper:
 
-BLM-AgrF: A New French Benchmark to Investigate Generalization of Agreement in Neural Networks
+[BLM-AgrF: A New French Benchmark to Investigate Generalization of Agreement in Neural Networks](https://aclanthology.org/2023.eacl-main.99/) 
