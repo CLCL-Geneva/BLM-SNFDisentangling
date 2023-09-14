@@ -147,7 +147,7 @@ def main():
     
     utils.load_config(args)
 
-        
+    os.makedirs("logs/", exist_ok=True)    
     logfile = "logs/" + utils.get_run_info(args) + ".log"
     logging.basicConfig(filename=logfile, filemode='w', level=logging.DEBUG)  
     logging.info("_______\nrun_experiments.py {}\n__________\n".format(args))
