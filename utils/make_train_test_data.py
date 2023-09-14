@@ -12,7 +12,7 @@ import argparse
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--data_path", default="../data/blm4dev", help="data directory")    
+    parser.add_argument("--data_path", default="../data/BLM-AgrF", help="data directory")    
     parser.add_argument("--sep", default=",", help="column separator character in the data files")
         
     parser.add_argument("--train_test_split", default = 0.9)
