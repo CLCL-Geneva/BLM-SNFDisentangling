@@ -153,32 +153,15 @@ def main():
     logging.info("_______\nrun_experiments.py {}\n__________\n".format(args))
         
     d_types = args.proc_types.split(" ")
-    N_exp = 2
+    N_exp = 1
     
     
     args.valid = False
     args.probe_latent = False
     
-    args.train_perc = "1.0 1.0 1.0"
-
-    for args.transformer in ["electra"]:
-        
-        os.makedirs(args.results_dir, exist_ok=True)
-        args.baseline = True
-         
-        for args.baseline_sys in ["ffnn"]:            
-            test_X_test(N_exp, args, d_types, make_plot=True)
-       
-        args.baseline = False
-
-        args.probe_latent = False
-        args.sampling = "joint"
-        for args.categorical_dim in range(1, 2):
-            test_X_test(N_exp, args, d_types, make_plot=True)    
-
-        args.sampling = "simple"
-        for args.latent in [7, 9]:
-            test_X_test(N_exp, args, d_types, make_plot=True)    
+    os.makedirs(args.results_dir, exist_ok=True)
+    
+    test_X_test(N_exp, args, d_types, make_plot=True)    
             
 
 
