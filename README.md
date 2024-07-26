@@ -16,7 +16,7 @@ Inspired by computational methods on vision, we develop a new linguistic task, t
 
 [BLM-AgrF: A New French Benchmark to Investigate Generalization of Agreement in Neural Networks](https://aclanthology.org/2023.eacl-main.99/) describes the BLM_AgrF dataset -- subject-verb agreement in French.
 
-[Grammatical information in BERT sentence embeddings as two-dimensional arrays (to appear at RepL4NLP 2023)]() describes the impact of reshaping BERT sentence embeddings to 2D arrays on detecting subject-verb agreement information.
+[Grammatical information in BERT sentence embeddings as two-dimensional arrays](https://aclanthology.org/2023.repl4nlp-1.3/) describes the impact of reshaping BERT sentence embeddings to 2D arrays on detecting subject-verb agreement information.
 
 
 ## Data
@@ -60,10 +60,10 @@ The baseline
   * with sentence embeddings as 1D arrays, input sequence is a stack of 1D arrays (vaes/VAE_1DxSeq.py)
   * with sentence embeddings as 1D arrays, input sequence is a 1D array (concatenated sentence representations) (vaes/VAE_1D.py)
 
-* `encoder-double decoder`: encodes a sequence of sentences, one decoder reconstructs the input sequence, the other decoder decodes the answer
-  * with sentence embeddings as 2D arrays, input sequence is a stack of 2D arrays (vaes/dual_VAE.py)
-  * with sentence embeddings as 1D arrays, input sequence is a stack of 1D arrays (vaes/dual_VAE_1DxSeq.py)
+* `two level`: a sentence level VAE encodes individual sentences, a task level uses the sentence representations from the latent of the sentence level and reconstructs the input sequence, and decodes the answer to the task
 
+* `two level sparsified`: same as the two level system, but the encoder on the sentence level is sparsified, such that one region of the sentence contributes to only one latent unit.
+   
 ### Running experiments
 
 To run experiments, use run_xperiments.py. Main arguments:
