@@ -1,20 +1,28 @@
+'''
+Created on Aug 8, 2022
+
+@author: vivi
+'''
 
 import numpy as np
 
 import torch
 from torch.nn.modules import Module
+from torch.distributions import Gamma
 from torch.nn import functional as F
 
 np.random.seed(1)
 torch.manual_seed(1)
+#torch.use_deterministic_algorithms(True)
 
 
 class Sampling(Module):
     
-    def __init__(self, latent_dim = None, categorical_dim = 1):
+    def __init__(self, latent_dim = None, categorical_dim = 0):
         super(Sampling, self).__init__()
         self.latent_dim = latent_dim
         self.categorical_dim = categorical_dim
+        self.is_training = True
         
         
 
@@ -24,18 +32,24 @@ class simpleSampling(Sampling):
         super(simpleSampling, self).__init__()
         self.latent_dim = latent_dim
         self.latent_size_in = latent_dim * 2
-        self.latent_size_sample = latent_dim
+        self.latent_size = latent_dim
+        
 
     def forward(self, latent_vec):
         mean, logvar = latent_vec.view(-1, self.latent_dim, 2).unbind(-1) # separate mean and var in two different vectors
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return eps * std + mean, mean, logvar      
+    
+    def getLatentInfo(self):
+        return {"cont": self.latent_dim, 
+                "disc": 0}
 
     def getinfo(self):
         return "simple-sampler" + "__latent-size_" + str(self.latent_dim) 
 
 
+    
 #_______________________________________________________
 
 
@@ -49,7 +63,7 @@ class JointSampling(Sampling):
         self.cont_len = latent_dim 
         
         self.latent_size_in = self.N_categ * self.categ_N + self.latent_dim * 2
-        self.latent_size_sample = self.N_categ * self.categ_N + self.latent_dim
+        self.latent_size = self.N_categ * self.categ_N + self.latent_dim
 
         self.device = device
         
@@ -64,12 +78,18 @@ class JointSampling(Sampling):
         self.is_discrete = is_discrete
         
         self.is_training = True
+        
 
     def forward(self, latent):        
         batch_len = latent.shape[0]
         ## separate the latent vector produced by the encoder into the discrete and the continuous portions, and reparameterize
         discrete_len = self.N_categ * self.categ_N
         return self.reparameterize({"disc": latent[:,:discrete_len].view(batch_len, self.N_categ, self.categ_N), "cont": latent[:,discrete_len:]}, batch_len)
+
+    
+    def getLatentInfo(self):
+        return {"cont": self.cont_len, "disc": self.N_categ * self.categ_N}
+
 
 
     ## original code for JointVAE at https://github.com/Schlumberger/joint-vae/blob/master/jointvae/models.py
@@ -82,10 +102,12 @@ class JointSampling(Sampling):
         if self.is_discrete:
             latent_sample_disc = []
             for alpha in latent_dist['disc']:
-                disc_sample = self.sample_gumbel_softmax(F.softmax(alpha, dim=1))
-                latent_sample_disc.append(disc_sample.view(-1).to(self.device))
+                #alpha_nonzero = torch.log(torch.where(alpha == 0, self.eps, alpha.to(torch.double)))   ## for when alphas are not logits, but the actual distribution
+                #disc_sample = self.sample_gumbel_softmax(F.softmax(alpha_nonzero, dim=1))
 
-            latent_sample.append(torch.stack(latent_sample_disc))   
+                disc_sample = self.sample_gumbel_softmax(F.softmax(alpha, dim=1))   ## alpha may be considered as logits of a distribution, or the distribution itself -- this depends on the implementation of the encoder
+                latent_sample_disc.append(disc_sample.view(-1).to(self.device))
+            latent_sample.append(torch.stack(latent_sample_disc))
             mean = None
             logvar = None         
 
@@ -106,32 +128,19 @@ class JointSampling(Sampling):
         one_std = torch.ones(logvar.shape, dtype=torch.float)
         
         if self.training:
-            std = torch.exp(0.5 * logvar)
+            std = torch.exp(0.5 * logvar).to(self.device)
             eps = torch.normal(zero_mean, one_std).to(self.device)
-            return mean + std * eps
+            return mean.to(self.device) + std * eps
         else:
             # Reconstruction mode
-            return mean
+            return mean.to(self.device)
                 
 
     def sample_gumbel_softmax(self, alpha):
-        """
-        Samples from a gumbel-softmax distribution using the reparameterization
-        trick.
-        Parameters
-        ----------
-        alpha : torch.Tensor
-            Parameters of the gumbel-softmax distribution. Shape (N, D)
-        """
         if self.is_training:
-            #return F.gumbel_softmax(alpha, self.temperature, hard=True, dim=1)
-            unif = torch.rand(alpha.size()).to(self.device)
-            gumbel = -torch.log(-torch.log(unif + self.eps) + self.eps)
-            # Reparameterize to create gumbel softmax sample
-            log_alpha = torch.log(alpha + self.eps)
-            logit = (log_alpha + gumbel) / self.temperature
-            return F.softmax(logit, dim=1)
-        
+            return F.gumbel_softmax(alpha, self.temperature, hard=False, dim=1)
+
+        '''
         # In reconstruction mode, pick most likely sample
         _, max_alpha = torch.max(alpha, dim=1)
         one_hot_samples = torch.zeros(alpha.size())
@@ -140,6 +149,10 @@ class JointSampling(Sampling):
         # tensors.
         one_hot_samples.scatter_(1, max_alpha.view(-1, 1).data.cpu(), 1)
         return one_hot_samples
+        '''
+        return F.gumbel_softmax(alpha, self.temperature, hard=True, dim=1)
+    
+    
 
     def getinfo(self):
         return "joint-sampler" + "__latent-cont-size_" + str(self.cont_len)  + "__latent-disc-size_" + str(self.N_categ) + "x" + str(self.categ_N) 

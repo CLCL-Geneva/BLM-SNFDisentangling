@@ -6,6 +6,9 @@ import math
 import torch
 import torch.nn as nn
 
+from utils.misc import get_padd
+
+
 class BaselineFFNN(nn.Module):
 
     def __init__(self, embed_dim, seq_size):
@@ -14,14 +17,11 @@ class BaselineFFNN(nn.Module):
         '''
         super(BaselineFFNN, self).__init__()
 
-        # Bert vector dim: 768
         self.nc = embed_dim
-        # Size of the sequence
         self.seq_size = seq_size
 
         self.hidden_dim = int(self.nc * 2)
     
-        # Fully connected layers
         self.lin1 = nn.Linear(self.nc*self.seq_size, self.hidden_dim)
         self.lin2 = nn.Linear(self.hidden_dim, self.hidden_dim)
         self.lin3 = nn.Linear(self.hidden_dim, self.nc)
@@ -50,9 +50,7 @@ class BaselineCNN_1DxSeq(nn.Module):
     def __init__(self, embed_dim, seq_size):
         super(BaselineCNN_1DxSeq, self).__init__()
 
-        # Bert vector dim: 768
         self.nc = embed_dim
-        # Size of the sequence
         self.seq_size = seq_size
 
         (k1seq, k1x) = (3, 3)
@@ -60,12 +58,10 @@ class BaselineCNN_1DxSeq(nn.Module):
         (k3seq, k3x) = (3, 3)
         s = 1
         
-        # Fully connected layers
         self.conv1 = nn.Conv2d(1, 4, kernel_size=(k1seq, k1x), stride=(s,1)) 
         self.conv2 = nn.Conv2d(4, 8, kernel_size=(k2seq, k2x)) 
         self.conv3 = nn.Conv2d(8, 16, kernel_size=(k3seq, k3x))
         
-        #ny = self.seq_size - k1y - k2y - k3y + 3
         nx = int((self.nc - k1x - k2x - k3x + 3))
         self.fc = nn.Linear(nx * 16, self.nc)
         
@@ -93,6 +89,7 @@ hid_ch = 32
 emb_x_dim = 32  #32
 
 kernel_size = (3, 15, 15)  #(3, 10, 10)
+stride = (1, 1, 1)
 
 class BaselineCNN(nn.Module):
     def __init__(self, embed_dim, seq_size):
@@ -111,17 +108,21 @@ class BaselineCNN(nn.Module):
 
         self.y_dim = int(self.embed_dim/self.x_dim)
     
-        (k1seq, k1x, k1y) = kernel_size
-        n_conv_layers = 1
-    
-        nx = int((self.x_dim - k1x + n_conv_layers))
-        ny = int((self.y_dim - k1y + n_conv_layers))
-        nseq = int((self.seq_size - k1seq + n_conv_layers))
-           
-        # Convolutional layers
-        self.conv1 = nn.Conv3d(1, self.hidden_ch, kernel_size=(k1seq, k1x, k1y)) 
+        self.kernel_size = kernel_size 
+        self.stride = stride
+                
+        (kseq, kx, ky) = kernel_size
+        (sseq, sx, sy) = stride
 
-        self.lin1 = nn.Linear(nx * ny * nseq * self.hidden_ch, self.embed_dim)
+        self.padding = (get_padd(self.seq_size, kseq, sseq),get_padd(self.x_dim, kx, sx), get_padd(self.y_dim, ky, sy))
+
+        self.nx = int((self.x_dim + 2*self.padding[1] - kx)/stride[1]+1)
+        self.ny = int((self.y_dim + 2*self.padding[2] - ky)/stride[2]+1)
+        self.nseq = int((self.seq_size + 2*self.padding[0] - kseq)/stride[0]+1)
+        self.N = self.nx * self.ny * self.nseq * self.hidden_ch
+
+        self.conv = nn.Conv3d(1, self.hidden_ch, kernel_size=self.kernel_size, stride=stride, padding=self.padding)
+        self.lin = nn.Linear(self.nx * self.ny * self.nseq * self.hidden_ch, self.embed_dim)
         
         print(self)
 
@@ -130,22 +131,10 @@ class BaselineCNN(nn.Module):
         
         batch_size = x.shape[0]
     
-        #print("x before reshape: {}".format(x.shape))
-        #print("\treshaping to (1,{},{},{})".format(self.seq_size, self.x_dim, self.y_dim))
-        
-        #x = x.view(batch_size, 1, x.shape[1], x.shape[2], x.shape[3])
         x = x.view(batch_size, 1, self.seq_size, self.x_dim, self.y_dim)
-        #x = torch.reshape(x, (batch_size, 1, self.seq_size, self.x_dim, self.y_dim))
-        #print("x after reshape: {}".format(x.shape))
-
-        x = torch.relu(self.conv1(x))
-        #print("x after conv 1: {}".format(x.shape))
-        
+        x = torch.relu(self.conv(x))        
         x = x.view(batch_size, -1)
-        #print("x after reshape: {}".format(x.shape))
-                
-        x = torch.relu(self.lin1(x))
-        #print("mean_var after lin1: {}".format(mean_var.shape))
+        x = torch.relu(self.lin(x))
 
         return {"output": x}
     
